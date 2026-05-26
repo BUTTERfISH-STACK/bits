@@ -1,18 +1,37 @@
-# README - Local Dev
+# README - Local run order and troubleshooting
 
-Prerequisites:
-- Docker Desktop installed and running
-- Git
+1. Prerequisites
+- Docker Desktop
+- Node.js + npm for frontend
 
-Quickstart:
-1. Clone repo and change to project dir
-2. Copy .env or edit values
-3. ./scripts/start_local.sh
-4. Apply DB migrations: ./scripts/apply_migrations.sh
-5. Access Adminer at http://localhost:8080 (Postgres)
-6. Test assistant endpoint:
-   curl -X POST http://localhost:8081/v1/assistant/chat -H "Content-Type: application/json" -d '{"session_id":"s1","user_id":"u1","tenant_id":"t1","prompt":"Summarize lead status for Acme"}'
+2. Start local stack
+- docker compose up -d db redis redpanda adminer ollama
+- docker compose up -d cv_handler cv_processor inference_gateway
 
-Notes:
-- Ollama image must be available and models placed in ./models
-- If Docker not available, run services manually in cloud or local equivalents
+3. Apply DB migrations and seed (if not auto-run)
+- ./scripts/apply_migrations.sh
+- psql -h localhost -U crm_user -d crm_dev -f services/db/migrations/002_seed_sample_data.sql
+- psql -h localhost -U crm_user -d crm_dev -f services/db/rls_helpers.sql
+
+4. Run frontend
+- cd apps/assistant
+- npm install
+- npm run dev
+
+5. Upload CV
+- Use frontend Upload page or curl script:
+  curl -F "file=@path/to/resume.pdf" -F "job_title=Product Manager" -F "industry=Tech / SaaS" http://localhost:8090/v1/tenants/11111111-1111-1111-1111-111111111111/cv/upload
+
+6. Monitor job
+- GET http://localhost:8090/v1/tenants/11111111-1111-1111-1111-111111111111/cv/{job_id}
+- Download result: http://localhost:8090/v1/tenants/11111111-1111-1111-1111-111111111111/cv/{job_id}/download
+
+Troubleshooting
+- 404 on upload: ensure cv_handler is healthy (GET /health) and reachable at port 8090.
+- Worker not processing: ensure cv_processor is running and can reach Ollama. Check logs.
+- Ollama 404: confirm Ollama container running and model is loaded in ./models.
+- PDF generation errors: ensure weasyprint dependencies are installed in cv_processor container (libcairo2, pango).
+
+Security notes
+- Validate and scan uploaded files for malware in production.
+- Enforce file size limits and content-type checks.
