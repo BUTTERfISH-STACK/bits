@@ -1,0 +1,3 @@
+volumes:
+  db_data:
+  clamav-db:

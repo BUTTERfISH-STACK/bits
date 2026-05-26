@@ -78,6 +78,14 @@ services:
     depends_on:
       - db
 
+  clamav:
+    image: mkodockx/docker-clamav:latest
+    container_name: crm_clamav
+    ports:
+      - "3310:3310"
+    volumes:
+      - clamav-db:/var/lib/clamav
+
   cv_processor:
     build:
       context: ./services/cv_processor
@@ -86,12 +94,15 @@ services:
     environment:
       OLLAMA_URL: http://ollama:11434/v1/generate
       STORAGE_ROOT: /app/storage
+      CLAMD_HOST: clamav
+      CLAMD_PORT: 3310
     volumes:
       - ./storage:/app/storage
       - ./models:/models
     depends_on:
       - ollama
       - db
+      - clamav
 
 volumes:
   db_data:

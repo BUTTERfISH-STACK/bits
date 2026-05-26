@@ -1,0 +1,1 @@
+clamav sidecar is included in docker-compose. The cv_processor will attempt to use python-clamd to query clamd running at CLAMD_HOST:CLAMD_PORT. Ensure clamd DB volume is persisted and the container has network access.
