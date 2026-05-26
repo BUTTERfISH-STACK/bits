@@ -134,6 +134,19 @@ def process_cv_job(job_record):
     except Exception as e:
         out_pdf = None
 
-    # In prod: update DB with result_text and result_pdf_path
+    # Update job record JSON to mark completed and attach result paths
+    try:
+        jobs_dir = os.path.join(STORAGE_ROOT, 'jobs')
+        job_file = os.path.join(jobs_dir, f"{job_id}.json")
+        if os.path.exists(job_file):
+            jr = json.loads(Path(job_file).read_text())
+            jr['status'] = 'completed'
+            jr['result_text_path'] = out_txt
+            jr['result_pdf_path'] = out_pdf
+            jr['updated_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            Path(job_file).write_text(json.dumps(jr), encoding='utf-8')
+    except Exception:
+        pass
+
     # Return paths
     return {'text_path': out_txt, 'pdf_path': out_pdf}
