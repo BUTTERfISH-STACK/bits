@@ -4,11 +4,45 @@ import uuid
 from pathlib import Path
 import json
 import time
+import shutil
+import re
 
 app = Flask(__name__)
 STORAGE = "./storage"
 Path(STORAGE).mkdir(parents=True, exist_ok=True)
 start_time = time.time()
+
+# Validation configuration
+ALLOWED_EXT = {'.pdf', '.docx', '.doc', '.txt'}
+MAX_FILE_BYTES = int(os.getenv('CV_MAX_BYTES', 5 * 1024 * 1024))  # 5 MB default
+FILENAME_SAFE_RE = re.compile(r'[^A-Za-z0-9._-]')
+
+try:
+    import magic
+    HAS_MAGIC = True
+except Exception:
+    HAS_MAGIC = False
+
+def sanitize_filename(name: str) -> str:
+    base = os.path.basename(name)
+    return FILENAME_SAFE_RE.sub('_', base)
+
+def detect_mime(path: str) -> str:
+    if HAS_MAGIC:
+        try:
+            m = magic.Magic(mime=True)
+            return m.from_file(path)
+        except Exception:
+            return ''
+    # fallback: use extension mapping
+    ext = Path(path).suffix.lower()
+    if ext == '.pdf':
+        return 'application/pdf'
+    if ext in ('.doc', '.docx'):
+        return 'application/msword'
+    if ext == '.txt':
+        return 'text/plain'
+    return ''
 
 @app.route('/health')
 def health_check():
@@ -36,10 +70,37 @@ def upload_cv(tenant_id):
     industry = request.form.get('industry')
     if not f:
         return jsonify({'error': 'file missing'}), 400
+
+    # sanitize filename and write to tmp path first
     job_id = str(uuid.uuid4())
-    filename = f.filename
-    save_path = os.path.join(STORAGE, job_id + '_' + filename)
-    f.save(save_path)
+    filename = sanitize_filename(f.filename or f"upload_{job_id}")
+    tmp_dir = os.path.join(STORAGE, 'tmp')
+    Path(tmp_dir).mkdir(parents=True, exist_ok=True)
+    tmp_path = os.path.join(tmp_dir, job_id + '_' + filename)
+    f.save(tmp_path)
+
+    # Size validation
+    size = os.path.getsize(tmp_path)
+    if size > MAX_FILE_BYTES:
+        os.remove(tmp_path)
+        return jsonify({'error': 'file too large'}), 413
+
+    # MIME/type validation
+    mime = detect_mime(tmp_path)
+    ext = Path(tmp_path).suffix.lower()
+    if ext not in ALLOWED_EXT:
+        os.remove(tmp_path)
+        return jsonify({'error': 'unsupported file extension'}), 415
+
+    # Basic MIME match (best effort)
+    if mime:
+        if 'pdf' in mime and ext != '.pdf':
+            os.remove(tmp_path)
+            return jsonify({'error': 'mime mismatch'}), 415
+
+    # Move to final storage
+    final_path = os.path.join(STORAGE, job_id + '_' + filename)
+    shutil.move(tmp_path, final_path)
 
     # Persist CV job record to DB. For dev, write to local jobs dir
     jobs_dir = os.path.join(STORAGE, 'jobs')
@@ -49,7 +110,7 @@ def upload_cv(tenant_id):
         'tenant_id': tenant_id,
         'user_id': None,
         'original_filename': filename,
-        'storage_path': save_path,
+        'storage_path': final_path,
         'job_title': job_title,
         'industry': industry,
         'status': 'pending',
