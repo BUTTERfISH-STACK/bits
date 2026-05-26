@@ -64,5 +64,34 @@ services:
       - db
       - ollama
 
+  cv_handler:
+    build:
+      context: ./services/api
+      dockerfile: Dockerfile
+    container_name: crm_cv_handler
+    environment:
+      FLASK_ENV: development
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./storage:/app/storage
+    depends_on:
+      - db
+
+  cv_processor:
+    build:
+      context: ./services/cv_processor
+      dockerfile: Dockerfile
+    container_name: crm_cv_processor
+    environment:
+      OLLAMA_URL: http://ollama:11434/v1/generate
+      STORAGE_ROOT: /app/storage
+    volumes:
+      - ./storage:/app/storage
+      - ./models:/models
+    depends_on:
+      - ollama
+      - db
+
 volumes:
   db_data:
