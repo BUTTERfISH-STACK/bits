@@ -22,7 +22,7 @@
     "clsx": "^1.2.1",
     "lucide-react": "^0.278.0",
     "pdf-lib": "^1.17.1",
-    "react-pdf": "^6.5.0",
+    "react-pdf": "^9.2.1",
     "puppeteer": "^21.4.0",
     "node-abort-controller": "^3.0.0",
     "form-data": "^4.0.0",
