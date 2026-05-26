@@ -1,13 +1,33 @@
-# services/api/cv_handler.py - add download endpoint
 from flask import Flask, request, jsonify, send_file
 import os
 import uuid
 from pathlib import Path
 import json
+import time
 
 app = Flask(__name__)
-STORAGE="./storage"
+STORAGE = "./storage"
 Path(STORAGE).mkdir(parents=True, exist_ok=True)
+start_time = time.time()
+
+@app.route('/health')
+def health_check():
+    return jsonify({
+        'status': 'ok',
+        'uptime_seconds': int(time.time() - start_time)
+    }), 200
+
+@app.route('/ready')
+def ready_check():
+    # basic readiness: storage dir exists and writable
+    try:
+        test_file = os.path.join(STORAGE, '.ready')
+        with open(test_file, 'w') as f:
+            f.write('ok')
+        os.remove(test_file)
+        return jsonify({'ready': True}), 200
+    except Exception as e:
+        return jsonify({'ready': False, 'error': str(e)}), 500
 
 @app.route('/v1/tenants/<tenant_id>/cv/upload', methods=['POST'])
 def upload_cv(tenant_id):
@@ -15,7 +35,7 @@ def upload_cv(tenant_id):
     job_title = request.form.get('job_title')
     industry = request.form.get('industry')
     if not f:
-        return jsonify({'error':'file missing'}), 400
+        return jsonify({'error': 'file missing'}), 400
     job_id = str(uuid.uuid4())
     filename = f.filename
     save_path = os.path.join(STORAGE, job_id + '_' + filename)
@@ -32,7 +52,8 @@ def upload_cv(tenant_id):
         'storage_path': save_path,
         'job_title': job_title,
         'industry': industry,
-        'status': 'pending'
+        'status': 'pending',
+        'created_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
     }
     Path(os.path.join(jobs_dir, job_id + '.json')).write_text(json.dumps(job_record))
 
@@ -45,7 +66,7 @@ def get_job(tenant_id, job_id):
     jobs_dir = os.path.join(STORAGE, 'jobs')
     p = Path(os.path.join(jobs_dir, job_id + '.json'))
     if not p.exists():
-        return jsonify({'error':'not found'}), 404
+        return jsonify({'error': 'not found'}), 404
     job_record = json.loads(p.read_text())
 
     # Attach result if available
@@ -60,7 +81,7 @@ def download_result(tenant_id, job_id):
     jobs_dir = os.path.join(STORAGE, 'jobs')
     p = Path(os.path.join(jobs_dir, job_id + '.json'))
     if not p.exists():
-        return jsonify({'error':'not found'}), 404
+        return jsonify({'error': 'not found'}), 404
     jr = json.loads(p.read_text())
     pdf = jr.get('result_pdf_path')
     txt = jr.get('result_text_path')
@@ -69,7 +90,7 @@ def download_result(tenant_id, job_id):
     elif txt and os.path.exists(txt):
         return send_file(txt, as_attachment=True)
     else:
-        return jsonify({'error':'result not ready'}), 202
+        return jsonify({'error': 'result not ready'}), 202
 
 if __name__ == '__main__':
-    app.run(port=8090)
+    app.run(host='0.0.0.0', port=8090)
