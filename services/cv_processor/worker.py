@@ -49,10 +49,91 @@ def process_cv_job(job_record):
     # result handling: assume result contains 'text' field with assistant reply
     assistant_text = result.get('text') or json.dumps(result)
 
-    # Save result to disk
-    out_path = os.path.join(STORAGE_ROOT, 'cv_results', f"{job_id}.txt")
-    Path(os.path.dirname(out_path)).mkdir(parents=True, exist_ok=True)
-    Path(out_path).write_text(assistant_text, encoding='utf-8')
+    # Save result to disk (raw assistant output)
+    results_dir = os.path.join(STORAGE_ROOT, 'cv_results')
+    Path(results_dir).mkdir(parents=True, exist_ok=True)
+    out_txt = os.path.join(results_dir, f"{job_id}.txt")
+    Path(out_txt).write_text(assistant_text, encoding='utf-8')
+
+    # Parse structured sections from assistant_text
+    ats_text = ''
+    visual_notes = ''
+    linkedin_blurb = ''
+    try:
+        parts = assistant_text.split('\n')
+        current = None
+        buf = []
+        for line in parts:
+            header = line.strip()
+            if header == 'ATS_RESUME':
+                if current and buf:
+                    if current == 'ATS_RESUME':
+                        ats_text = '\n'.join(buf)
+                current = 'ATS_RESUME'
+                buf = []
+                continue
+            if header == 'VISUAL_NOTES':
+                if current == 'ATS_RESUME':
+                    ats_text = '\n'.join(buf)
+                current = 'VISUAL_NOTES'
+                buf = []
+                continue
+            if header == 'LINKEDIN_BLURB':
+                if current == 'VISUAL_NOTES':
+                    visual_notes = '\n'.join(buf)
+                current = 'LINKEDIN_BLURB'
+                buf = []
+                continue
+            if header == 'KEYWORDS':
+                if current == 'LINKEDIN_BLURB':
+                    linkedin_blurb = '\n'.join(buf)
+                current = 'KEYWORDS'
+                buf = []
+                continue
+            buf.append(line)
+        # flush
+        if current == 'ATS_RESUME' and not ats_text:
+            ats_text = '\n'.join(buf)
+        elif current == 'VISUAL_NOTES' and not visual_notes:
+            visual_notes = '\n'.join(buf)
+        elif current == 'LINKEDIN_BLURB' and not linkedin_blurb:
+            linkedin_blurb = '\n'.join(buf)
+    except Exception as e:
+        ats_text = assistant_text
+        visual_notes = ''
+        linkedin_blurb = ''
+
+    # Generate HTML for visual resume using visual_notes and ats_text
+    try:
+        from weasyprint import HTML
+        html_content = f"""
+        <html>
+        <head>
+        <meta charset='utf-8'>
+        <style>
+        body {{ font-family: 'Helvetica Neue', Arial, sans-serif; color:#111; padding:40px; max-width:800px; margin:auto }}
+        .name {{ font-size:28px; font-weight:700; margin-bottom:4px }}
+        .title {{ font-size:14px; color:#666; margin-bottom:16px }}
+        pre {{ font-family: monospace; white-space: pre-wrap; font-size:12px }}
+        </style>
+        </head>
+        <body>
+        <div class='name'>Reformatted Resume</div>
+        <div class='title'>{job_title} — {industry}</div>
+        <h3>Summary</h3>
+        <pre>{linkedin_blurb}</pre>
+        <h3>Experience & Skills</h3>
+        <pre>{ats_text}</pre>
+        <h3>Design Notes</h3>
+        <pre>{visual_notes}</pre>
+        </body>
+        </html>
+        """
+        out_pdf = os.path.join(results_dir, f"{job_id}.pdf")
+        HTML(string=html_content).write_pdf(out_pdf)
+    except Exception as e:
+        out_pdf = None
 
     # In prod: update DB with result_text and result_pdf_path
-    return out_path
+    # Return paths
+    return {'text_path': out_txt, 'pdf_path': out_pdf}

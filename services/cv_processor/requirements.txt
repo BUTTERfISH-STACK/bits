@@ -1,3 +1,5 @@
+# services/cv_processor/requirements.txt
 requests
 python-docx
 pdfminer.six
+weasyprint
