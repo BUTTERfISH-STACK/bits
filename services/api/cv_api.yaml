@@ -1,0 +1,49 @@
+# services/api/cv_api.yaml
+openapi: 3.0.1
+info:
+  title: CV Service API
+  version: 1.0.0
+paths:
+  /v1/tenants/{tenant_id}/cv/upload:
+    post:
+      summary: Upload CV for rewrite
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                job_title:
+                  type: string
+                industry:
+                  type: string
+      responses:
+        '202':
+          description: Accepted
+  /v1/tenants/{tenant_id}/cv/{job_id}:
+    get:
+      summary: Get CV job status/result
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
