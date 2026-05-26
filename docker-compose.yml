@@ -1,0 +1,68 @@
+version: "3.8"
+
+services:
+  db:
+    image: ankane/pgvector:postgres15
+    container_name: crm_db
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./services/db/migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
+    container_name: crm_redis
+    ports:
+      - "6379:6379"
+
+  redpanda:
+    image: vectorized/redpanda:latest
+    container_name: crm_redpanda
+    command: ["redpanda", "start", "--overprovisioned", "--smp 1", "--memory 1G", "--reserve-memory 0M"]
+    ports:
+      - "9092:9092"
+      - "9644:9644"
+
+  adminer:
+    image: adminer
+    container_name: crm_adminer
+    ports:
+      - "8080:8080"
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: crm_ollama
+    # Note: ensure Ollama image and licensing are available. Mount model dir with GGUF file.
+    volumes:
+      - ./models:/models
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_DEV=true
+
+  inference_gateway:
+    build:
+      context: ./services/inference_gateway
+      dockerfile: Dockerfile
+    container_name: crm_inference_gateway
+    environment:
+      OLLAMA_SVC_TOKEN: ${OLLAMA_SVC_TOKEN}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+    ports:
+      - "8081:8080"
+    depends_on:
+      - db
+      - ollama
+
+volumes:
+  db_data:
