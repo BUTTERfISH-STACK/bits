@@ -1,4 +1,4 @@
-const fetch = require('node-fetch')
+const fetch = require('../../node-fetch-shim')
 const { OLLAMA_API, REQUIRED_MODELS } = require('../../../lib/ollama')
 
 module.exports = async function handler(req, res) {
